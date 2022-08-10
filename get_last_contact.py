@@ -1,12 +1,10 @@
 import requests
 import csv
+import configparser
 
 # TODO: remove all verify=False for and re-enable warnings
 import urllib3
 urllib3.disable_warnings()
-
-PIPEDRIVE_API_BASE_URL = "https://hiredly.pipedrive.com/api/"
-
 
 ## Search for organization ##
 def search_org(company_name: str, param: dict) -> dict:
@@ -63,8 +61,10 @@ def get_person_details(person_id: str):
 
 ##################################################################################################
 if __name__ == "__main__":
-    with open('credential.txt', 'r') as file:
-        API_TOKEN = file.read().replace('\n', '')
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+    API_TOKEN = config['DEFAULT']['ApiToken']
+    PIPEDRIVE_API_BASE_URL = config['DEFAULT']['PipeDriveUrl']
 
     company_detail_list = []
     with open('data/companylist.csv', newline='') as csvfile:
@@ -97,12 +97,11 @@ if __name__ == "__main__":
             print("Email: " + person_details['email'])
             print("\n")
 
-    print(company_detail_list)
+    print("Writing result to 'result.csv' file....")
     with open('result.csv', 'w', newline='') as csvfile:
         fieldnames = ["company_name", "contact_name", "contact_email"]
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
         writer.writeheader()
         for row in company_detail_list:
-            print(row)
             writer.writerow(row)
