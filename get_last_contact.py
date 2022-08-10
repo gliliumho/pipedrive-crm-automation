@@ -1,18 +1,25 @@
 import requests
 import csv
 
+# TODO: remove all verify=False for and re-enable warnings
+import urllib3
+urllib3.disable_warnings()
+
 PIPEDRIVE_API_BASE_URL = "https://hiredly.pipedrive.com/api/"
 
 
 ## Search for organization ##
-def search_org(company_name: str, param: dict) -> str:
+def search_org(company_name: str, param: dict) -> dict:
     search_params = param
     search_params["term"] = company_name
     search_params["fields"] = "name"
+    search_params["exact_match"] = True
 
     search_response = requests.get(PIPEDRIVE_API_BASE_URL + "v1/organizations/search",
                                    params=search_params, verify=False)
-    return str(search_response.json()['data']['items'][0]['item']['id'])
+    top_result = search_response.json()['data']['items'][0]['item']
+
+    return {'id': str(top_result['id']), 'name': top_result['name']}
 
 
 ## Get organization details and last activity id ##
@@ -42,44 +49,60 @@ def get_person(person_id: str):
                           "v1/persons/" + person_id, params=param, verify=False)
     return person.json()['data']
 
+
 ## Get name and primary email of person ##
 def get_person_details(person_id: str):
     last_act_person = get_person(person_id)
     name = last_act_person['name']
     primary_email = last_act_person['primary_email']
-    if primary_email.isspace():
-        primary_email = next(filter(lambda email: email['primary'] is True, last_act_person['email']))['value']
+    if not primary_email:
+        primary_email = next(filter(
+            lambda email: email['primary'] is True, last_act_person['email']))['value']
     return {'name': name, 'email': primary_email}
-    
 
 
 ##################################################################################################
-
 if __name__ == "__main__":
     with open('credential.txt', 'r') as file:
         API_TOKEN = file.read().replace('\n', '')
 
-    # with open('data/companylist.csv', newline='') as csvfile:
-    #     companyreader = csv.reader(csvfile, delimiter=',', quotechar='"')
-    test_company_name = "Acer Sales & Services"
+    company_detail_list = []
+    with open('data/companylist.csv', newline='') as csvfile:
+        companyreader = csv.DictReader(csvfile, delimiter=',', quotechar='"')
+        for row in companyreader:
+            search_company_name = row['name']
+            print("Searching for company: " + search_company_name)
 
-    # Search organization
-    parameter = {"api_token": API_TOKEN}
-    org_id = search_org(test_company_name, param=parameter)
-    print(org_id)
+            # Search organization
+            parameter = {"api_token": API_TOKEN}
+            found_company = search_org(search_company_name, param=parameter)
+            org_id = found_company['id']
+            org_name = found_company['name']
+            print("Found :" + org_name + " [" + org_id + "]")
 
-    # Get organization details and last activity id
-    last_activity_id = get_org_last_activity_id(org_id)
-    print(last_activity_id)
+            # Get organization details and last activity id
+            last_activity_id = get_org_last_activity_id(org_id)
 
-    # Get activity
-    last_act_primary_participant_id = get_primary_participant_id(
-        last_activity_id)
-    print(last_act_primary_participant_id)
+            # Get activity
+            last_act_primary_participant_id = get_primary_participant_id(
+                last_activity_id)
 
-    # Get person primary contact
-    person_details = get_person_details(last_act_primary_participant_id)
-    
-    print("Company: " + test_company_name)
-    print("Name: " + person_details['name'])
-    print("Email: " + person_details['email'])
+            # Get person primary contact
+            person_details = get_person_details(
+                last_act_primary_participant_id)
+
+            company_detail_list.append(
+                {'company_name': org_name, 'contact_name': person_details['name'], 'contact_email': person_details['email']})
+            print("Name: " + person_details['name'])
+            print("Email: " + person_details['email'])
+            print("\n")
+
+    print(company_detail_list)
+    with open('result.csv', 'w', newline='') as csvfile:
+        fieldnames = ["company_name", "contact_name", "contact_email"]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+        writer.writeheader()
+        for row in company_detail_list:
+            print(row)
+            writer.writerow(row)
